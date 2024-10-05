@@ -2,21 +2,21 @@ FROM golang:1.22
 
 ARG REPO_DIR=.
 
-# git+ssh {{
-RUN apt-get update && apt-get install -y ca-certificates git-core ssh rsync
-RUN mkdir -p -m 0700 ~/.ssh && ssh-keyscan github.com >> ~/.ssh/known_hosts
-RUN git config --global url.ssh://git@github.com/.insteadOf https://github.com/
-# }}
+# Install necessary packages
+RUN apt-get update && apt-get install -y ca-certificates git-core rsync
 
 WORKDIR /app
 
-# download go modules
-COPY ${REPO_DIR}/go.mod ${REPO_DIR}/go.sum /
-RUN --mount=type=ssh go mod download
+# Configure Git to use HTTPS
+RUN git config --global url.https://github.com/.insteadOf ssh://git@github.com/
+
+# Download Go modules with cache
+COPY ${REPO_DIR}/go.mod ${REPO_DIR}/go.sum ./
+RUN --mount=type=cache,id=gomod-cache,target=/go/pkg/mod go mod download
 
 COPY ${REPO_DIR} .
 
-# build
-RUN --mount=type=ssh make deps CGO_ENABLED=0
-RUN --mount=type=ssh make build CGO_ENABLED=0
+# Build with cache
+RUN --mount=type=cache,id=deps-cache,target=/app/.deps make deps CGO_ENABLED=0
+RUN --mount=type=cache,id=build-cache,target=/app/.build make build CGO_ENABLED=0
 RUN rsync -a bin/ /bin/
